@@ -121,7 +121,7 @@ export default function App() {
   }
 
   if (!user) {
-    return <Login data={data} onLogin={setUser} />;
+    return <Login data={data} update={update} onLogin={setUser} />;
   }
 
   return (
@@ -170,11 +170,20 @@ const TabBtn = ({ icon, label, active, onClick }) => (
 );
 
 /* ---------- login ---------- */
-function Login({ data, onLogin }) {
+function Login({ data, update, onLogin }) {
+  const [mode, setMode] = useState("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [first, setFirst] = useState("");
+  const [last, setLast] = useState("");
   const [err, setErr] = useState("");
   const [shake, setShake] = useState(false);
+
+  const fail = (msg) => {
+    setErr(msg);
+    setShake(true);
+    setTimeout(() => setShake(false), 500);
+  };
 
   const tryLogin = () => {
     const u = username.trim().toLowerCase();
@@ -189,11 +198,37 @@ function Login({ data, onLogin }) {
     if (match) {
       onLogin(match);
     } else {
-      setErr("No match — check your username and password.");
-      setShake(true);
-      setTimeout(() => setShake(false), 500);
+      fail("No match — check your username and password.");
     }
   };
+
+  const trySignup = () => {
+    const u = username.trim();
+    if (!first.trim() || !u || !password) {
+      fail("Fill in your first name, a username, and a password.");
+      return;
+    }
+    const taken =
+      u.toLowerCase() === "admin" ||
+      data.users.some((m) => (m.username || "").trim().toLowerCase() === u.toLowerCase());
+    if (taken) {
+      fail("That username is taken — try another.");
+      return;
+    }
+    const newUser = {
+      id: "u" + Date.now(),
+      first: first.trim(),
+      last: last.trim(),
+      username: u,
+      password,
+      role: "Member",
+    };
+    update({ users: [...data.users, newUser] });
+    onLogin(newUser);
+  };
+
+  const submit = () => (mode === "login" ? tryLogin() : trySignup());
+  const switchMode = (m) => { setMode(m); setErr(""); };
 
   return (
     <div className="app center-screen login-bg">
@@ -202,14 +237,32 @@ function Login({ data, onLogin }) {
         <img src={LOGO} alt="Bhangra All Stars Sydney" className="logo-lg" />
         <p className="login-sub">Team admin hub</p>
 
+        <div className="mode-switch">
+          <button className={`mode-btn ${mode === "login" ? "on" : ""}`} onClick={() => switchMode("login")}>Log in</button>
+          <button className={`mode-btn ${mode === "signup" ? "on" : ""}`} onClick={() => switchMode("signup")}>Create profile</button>
+        </div>
+
+        {mode === "signup" && (
+          <div className="grid2" style={{ width: "100%" }}>
+            <label className="field">
+              <span>First name</span>
+              <input value={first} onChange={(e) => setFirst(e.target.value)} placeholder="e.g. Nav" />
+            </label>
+            <label className="field">
+              <span>Last name</span>
+              <input value={last} onChange={(e) => setLast(e.target.value)} placeholder="e.g. Singh" />
+            </label>
+          </div>
+        )}
+
         <label className="field">
           <span>Username</span>
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="Your username"
+            placeholder={mode === "signup" ? "Pick a username" : "Your username"}
             autoCapitalize="none"
-            onKeyDown={(e) => e.key === "Enter" && tryLogin()}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
           />
         </label>
         <label className="field">
@@ -218,13 +271,13 @@ function Login({ data, onLogin }) {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Your password"
-            onKeyDown={(e) => e.key === "Enter" && tryLogin()}
+            placeholder={mode === "signup" ? "Pick a password" : "Your password"}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
           />
         </label>
         {err && <p className="err">{err}</p>}
-        <button className="btn primary wide" onClick={tryLogin}>
-          Log in
+        <button className="btn primary wide" onClick={submit}>
+          {mode === "login" ? "Log in" : "Create profile"}
         </button>
       </div>
     </div>
@@ -958,6 +1011,16 @@ function GlobalStyles() {
       .login-title { font-size: 46px; font-weight:800; letter-spacing: 6px; margin: 14px 0 4px; text-transform: uppercase; }
       .login-sub { color: var(--muted); font-size: 13px; margin-bottom: 26px; text-align:center; }
       .login-card .field { width:100%; }
+      .mode-switch {
+        display:flex; width:100%; gap:4px; margin-bottom: 18px;
+        background: var(--bg2); border:1px solid var(--line); border-radius: 12px; padding: 4px;
+      }
+      .mode-btn {
+        flex:1; background: transparent; border:none; color: var(--muted);
+        font-family:inherit; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:.5px;
+        padding: 9px 6px; border-radius: 9px; cursor:pointer; transition: all .18s ease;
+      }
+      .mode-btn.on { background: var(--red); color:#fff; }
       .shake { animation: shake .4s ease; }
       @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 50%{transform:translateX(8px)} 75%{transform:translateX(-5px)} }
 
