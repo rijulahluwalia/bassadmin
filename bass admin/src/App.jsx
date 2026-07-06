@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
-  Calendar as CalendarIcon, ListChecks, Wallet, Users, LogOut, Plus,
+  Calendar as CalendarIcon, ListChecks, Users, LogOut, Plus,
   MapPin, Clock, Video, Trash2, Check, ChevronLeft, ChevronRight, X,
-  UserPlus, Music, CircleDollarSign, Pencil, User
+  UserPlus, Pencil, User, Music
 } from "lucide-react";
 
 /* ---------- storage helpers (shared across the whole team) ---------- */
@@ -27,10 +27,7 @@ const seedData = {
       notes: "Golden hour shots near the water",
     },
   ],
-  money: [
-    { id: "m1", name: "Nav", amount: 300, reason: "Teaching", settled: false, added: "2026-07-06" },
-    { id: "m2", name: "Rijul", amount: 36, reason: "Buying the boosting for Instagram", settled: false, added: "2026-07-06" },
-  ],
+  money: [],
 };
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -138,7 +135,6 @@ export default function App() {
         <nav className="tabs">
           <TabBtn icon={<ListChecks size={17} />} label="Tasks" active={tab === "tasks"} onClick={() => setTab("tasks")} />
           <TabBtn icon={<CalendarIcon size={17} />} label="Calendar" active={tab === "calendar"} onClick={() => setTab("calendar")} />
-          <TabBtn icon={<Wallet size={17} />} label="Money" active={tab === "money"} onClick={() => setTab("money")} />
           {user.isAdmin && (
             <TabBtn icon={<Users size={17} />} label="Team" active={tab === "team"} onClick={() => setTab("team")} />
           )}
@@ -158,7 +154,6 @@ export default function App() {
       <main className="content fade-in" key={tab}>
         {tab === "tasks" && <Tasks data={data} update={update} />}
         {tab === "calendar" && <CalendarView data={data} />}
-        {tab === "money" && <Money data={data} update={update} me={user} />}
         {tab === "team" && user.isAdmin && <Team data={data} update={update} me={user} />}
         {tab === "profile" && !user.isAdmin && (
           <Profile data={data} update={update} me={user} onUserUpdate={setUser} />
@@ -358,7 +353,7 @@ function Tasks({ data, update }) {
         {shown.map((t) => (
           <article key={t.id} className={`card status-${t.status.replace(" ", "-").toLowerCase()}`}>
             <div className="card-top">
-              <span className="type-pill"><Video size={13} /> {t.type}</span>
+              <span className="type-pill">{t.type === "Gig" ? <Music size={13} /> : <Video size={13} />} {t.type}</span>
               <div className="card-actions">
                 <button className="icon-btn" onClick={() => openEdit(t)} title="Edit"><Pencil size={15} /></button>
                 <button className="icon-btn danger" onClick={() => remove(t.id)} title="Delete"><Trash2 size={15} /></button>
@@ -366,7 +361,7 @@ function Tasks({ data, update }) {
             </div>
             <h3>{t.title}</h3>
             <div className="meta">
-              <span><Clock size={14} /> Record: <b>{fmt(t.recordDate)}</b></span>
+              <span><Clock size={14} /> {t.type === "Gig" ? "Gig" : "Record"}: <b>{fmt(t.recordDate)}</b></span>
               <span><CalendarIcon size={14} /> Post: <b>{fmt(t.postDate)}</b></span>
               <span><Users size={14} /> {t.people} people</span>
               <span><MapPin size={14} /> {t.location || "TBC"}</span>
@@ -395,13 +390,13 @@ function Tasks({ data, update }) {
           <div className="grid2">
             <label className="field"><span>Type</span>
               <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                {["Video", "Photoshoot", "Post", "Story", "Rehearsal", "Other"].map((x) => <option key={x}>{x}</option>)}
+                {["Video", "Photoshoot", "Post", "Story", "Rehearsal", "Gig", "Other"].map((x) => <option key={x}>{x}</option>)}
               </select>
             </label>
             <label className="field"><span>People required</span>
               <input type="number" min="1" value={form.people} onChange={(e) => setForm({ ...form, people: +e.target.value })} />
             </label>
-            <label className="field"><span>Record date</span>
+            <label className="field"><span>{form.type === "Gig" ? "Gig date" : "Record date"}</span>
               <input type="date" value={form.recordDate} onChange={(e) => setForm({ ...form, recordDate: e.target.value })} />
             </label>
             <label className="field"><span>Post date</span>
@@ -431,7 +426,7 @@ function CalendarView({ data }) {
   const events = useMemo(() => {
     const map = {};
     data.tasks.forEach((t) => {
-      if (t.recordDate) (map[t.recordDate] = map[t.recordDate] || []).push({ kind: "Record", task: t });
+      if (t.recordDate) (map[t.recordDate] = map[t.recordDate] || []).push({ kind: t.type === "Gig" ? "Gig" : "Record", task: t });
       if (t.postDate) (map[t.postDate] = map[t.postDate] || []).push({ kind: "Post", task: t });
     });
     return map;
@@ -459,7 +454,7 @@ function CalendarView({ data }) {
       <div className="section-head">
         <div>
           <h2>Calendar</h2>
-          <p className="muted"><span className="dot rec" /> record day &nbsp; <span className="dot post" /> post day</p>
+          <p className="muted"><span className="dot rec" /> record &nbsp; <span className="dot post" /> post &nbsp; <span className="dot gig" /> gig</p>
         </div>
         <div className="cal-nav">
           <button className="icon-btn" onClick={() => shift(-1)}><ChevronLeft size={18} /></button>
@@ -486,8 +481,8 @@ function CalendarView({ data }) {
               <span className="cal-num">{d}</span>
               <div className="cal-evs">
                 {evs.slice(0, 3).map((e, j) => (
-                  <span key={j} className={`cal-ev-bar ${e.kind === "Record" ? "rec-bar" : "post-bar"}`}>
-                    {e.kind === "Record" ? "Rec" : "Post"}
+                  <span key={j} className={`cal-ev-bar ${e.kind === "Record" ? "rec-bar" : e.kind === "Gig" ? "gig-bar" : "post-bar"}`}>
+                    {e.kind === "Record" ? "Rec" : e.kind === "Gig" ? "Gig" : "Post"}
                   </span>
                 ))}
                 {evs.length > 3 && <span className="cal-more">+{evs.length - 3} more</span>}
@@ -502,7 +497,7 @@ function CalendarView({ data }) {
           <h3>{fmt(selected)}</h3>
           {(events[selected] || []).map((e, i) => (
             <div key={i} className="day-ev">
-              <span className={`ev-tag ${e.kind === "Record" ? "rec-tag" : "post-tag"}`}>{e.kind}</span>
+              <span className={`ev-tag ${e.kind === "Record" ? "rec-tag" : e.kind === "Gig" ? "gig-tag" : "post-tag"}`}>{e.kind}</span>
               <div>
                 <b>{e.task.title}</b>
                 <p className="muted small">
@@ -512,113 +507,6 @@ function CalendarView({ data }) {
             </div>
           ))}
         </div>
-      )}
-    </section>
-  );
-}
-
-/* ---------- money ---------- */
-function Money({ data, update, me }) {
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", amount: "", reason: "" });
-
-  const isAdmin = !!me.isAdmin;
-  const mine = (m) =>
-    (m.user && me.username && m.user.toLowerCase() === me.username.toLowerCase()) ||
-    m.name.trim().toLowerCase() === (me.first || "").trim().toLowerCase();
-  const visible = isAdmin ? data.money : data.money.filter(mine);
-
-  const owing = visible.filter((m) => !m.settled);
-  const settled = visible.filter((m) => m.settled);
-  const total = owing.reduce((s, m) => s + Number(m.amount), 0);
-
-  const add = () => {
-    const name = isAdmin ? form.name.trim() : `${me.first} ${me.last}`.trim();
-    if (!name || !form.amount) return;
-    update({
-      money: [
-        ...data.money,
-        { id: "m" + Date.now(), name, user: isAdmin ? null : me.username, amount: Number(form.amount), reason: form.reason.trim(), settled: false, added: todayISO() },
-      ],
-    });
-    setForm({ name: "", amount: "", reason: "" });
-    setShowForm(false);
-  };
-
-  const toggle = (id) => update({ money: data.money.map((m) => (m.id === id ? { ...m, settled: !m.settled } : m)) });
-  const remove = (id) => update({ money: data.money.filter((m) => m.id !== id) });
-
-  return (
-    <section>
-      <div className="section-head">
-        <div>
-          <h2>Money owed</h2>
-          <p className="muted">{isAdmin ? "What BASS owes the team" : "What BASS owes you"}</p>
-        </div>
-        <button className="btn primary" onClick={() => setShowForm(true)}><Plus size={16} /> Add entry</button>
-      </div>
-
-      <div className="total-card">
-        <CircleDollarSign size={26} />
-        <div>
-          <span className="total-amt">${total.toFixed(2)}</span>
-          <span className="muted small"> {isAdmin ? `owed across ${owing.length} ${owing.length === 1 ? "entry" : "entries"}` : "owed to you"}</span>
-        </div>
-      </div>
-
-      <div className="cards">
-        {owing.map((m) => (
-          <article key={m.id} className="card money-card">
-            <div className="card-top">
-              <span className="avatar big">{m.name[0]}</span>
-              <div className="card-actions">
-                <button className="icon-btn danger" onClick={() => remove(m.id)} title="Delete"><Trash2 size={15} /></button>
-              </div>
-            </div>
-            <h3>{m.name} is owed <span className="amt">${Number(m.amount).toFixed(2)}</span></h3>
-            <p className="notes">{m.reason || "No reason given"}</p>
-            <p className="muted small">Added {fmt(m.added)}</p>
-            {isAdmin && (
-              <button className="btn ghost" onClick={() => toggle(m.id)}><Check size={15} /> Mark as paid</button>
-            )}
-          </article>
-        ))}
-      </div>
-
-      {settled.length > 0 && (
-        <>
-          <h3 className="settled-head">Paid back</h3>
-          <div className="cards">
-            {settled.map((m) => (
-              <article key={m.id} className="card money-card settled">
-                <h3>{m.name} — ${Number(m.amount).toFixed(2)}</h3>
-                <p className="notes">{m.reason}</p>
-                {isAdmin && <button className="btn ghost" onClick={() => toggle(m.id)}>Undo</button>}
-              </article>
-            ))}
-          </div>
-        </>
-      )}
-
-      {showForm && (
-        <Modal title="Add money entry" onClose={() => setShowForm(false)}>
-          {isAdmin ? (
-            <label className="field"><span>Who is owed?</span>
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Nav" autoFocus />
-            </label>
-          ) : (
-            <label className="field"><span>Who is owed?</span>
-              <input value={`${me.first} ${me.last}`.trim()} disabled />
-            </label>
-          )}
-          <label className="field"><span>Amount (AUD)</span>
-            <input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="300" />
-          </label>
-          <label className="field"><span>Reason</span>
-            <input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="e.g. Teaching" />
-          </label>
-          <button className="btn primary wide" onClick={add}>Add entry</button>
-        </Modal>
       )}
     </section>
   );
@@ -777,7 +665,7 @@ function Profile({ data, update, me, onUserUpdate }) {
     const newFullName = `${first} ${last}`.trim();
 
     const users = data.users.map((u) => (u.id === me.id ? updatedUser : u));
-    const money = data.money.map((m) => {
+    const money = (data.money || []).map((m) => {
       const isMine =
         (m.user && m.user.toLowerCase() === oldUsername) ||
         m.name.trim().toLowerCase() === oldFullName;
@@ -1027,16 +915,19 @@ function GlobalStyles() {
       }
       .rec-bar { background: var(--red); color:#fff; }
       .post-bar { background: #FFFFFF; color: var(--bg); }
+      .gig-bar { background: var(--blue); color: var(--bg); }
       .cal-more { font-size:10px; color: var(--muted); font-weight:700; padding-left:2px; }
       .dot { width:9px; height:9px; border-radius:50%; display:inline-block; }
       .dot.rec { background: var(--red); box-shadow: 0 0 8px rgba(224,40,48,.7); }
       .dot.post { background: #FFFFFF; box-shadow: 0 0 8px rgba(255,255,255,.6); }
+      .dot.gig { background: var(--blue); box-shadow: 0 0 8px rgba(157,182,255,.7); }
       .day-panel { margin-top: 20px; background: var(--card); border:1px solid var(--line); border-radius: var(--radius); padding: 18px; }
       .day-panel h3 { margin-bottom: 12px; }
       .day-ev { display:flex; gap:12px; align-items:flex-start; padding:10px 0; border-top:1px solid var(--line); }
       .ev-tag { font-size:11px; font-weight:800; letter-spacing:1px; text-transform:uppercase; padding:4px 9px; border-radius:999px; }
       .rec-tag { background: rgba(224,40,48,.18); color: var(--red-soft); }
       .post-tag { background: rgba(255,255,255,.14); color: #FFFFFF; }
+      .gig-tag { background: rgba(157,182,255,.18); color: var(--blue); }
 
       /* money */
       .total-card {
