@@ -12,6 +12,7 @@ const STORE_KEY = "bass-team-data-v1";
 const LOGO = "/logo.png";
 
 const seedData = {
+  adminProfile: { first: "Admin", last: "" },
   users: [],
   tasks: [
     {
@@ -44,10 +45,10 @@ async function loadData() {
         .select("value")
         .eq("key", STORE_KEY)
         .maybeSingle();
-      if (!error && data && data.value) return data.value;
+      if (!error && data && data.value) return { ...seedData, ...data.value };
     } else {
       const raw = localStorage.getItem(STORE_KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) return { ...seedData, ...JSON.parse(raw) };
     }
   } catch (e) {
     console.error("Load failed", e);
@@ -170,25 +171,25 @@ const TabBtn = ({ icon, label, active, onClick }) => (
 
 /* ---------- login ---------- */
 function Login({ data, onLogin }) {
-  const [first, setFirst] = useState("");
-  const [last, setLast] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [shake, setShake] = useState(false);
 
   const tryLogin = () => {
-    if (first.trim().toLowerCase() === "admin" && last === "BassRocks1234") {
-      onLogin({ id: "admin", first: "Admin", last: "", role: "Admin", isAdmin: true });
+    const u = username.trim().toLowerCase();
+    if (u === "admin" && password === "BassRocks1234") {
+      const p = data.adminProfile || { first: "Admin", last: "" };
+      onLogin({ id: "admin", first: p.first || "Admin", last: p.last || "", username: "Admin", role: "Admin", isAdmin: true });
       return;
     }
     const match = data.users.find(
-      (u) =>
-        u.first.trim().toLowerCase() === first.trim().toLowerCase() &&
-        u.last.trim().toLowerCase() === last.trim().toLowerCase()
+      (m) => (m.username || "").trim().toLowerCase() === u && (m.password || "") === password
     );
     if (match) {
       onLogin(match);
     } else {
-      setErr("No match — check your first name and last name.");
+      setErr("No match — check your username and password.");
       setShake(true);
       setTimeout(() => setShake(false), 500);
     }
@@ -202,21 +203,22 @@ function Login({ data, onLogin }) {
         <p className="login-sub">Team admin hub</p>
 
         <label className="field">
-          <span>First name</span>
+          <span>Username</span>
           <input
-            value={first}
-            onChange={(e) => setFirst(e.target.value)}
-            placeholder="e.g. Rijul"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Your username"
+            autoCapitalize="none"
             onKeyDown={(e) => e.key === "Enter" && tryLogin()}
           />
         </label>
         <label className="field">
-          <span>Last name</span>
+          <span>Password</span>
           <input
             type="password"
-            value={last}
-            onChange={(e) => setLast(e.target.value)}
-            placeholder="Your last name"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Your password"
             onKeyDown={(e) => e.key === "Enter" && tryLogin()}
           />
         </label>
@@ -462,7 +464,9 @@ function Money({ data, update, me }) {
   const [form, setForm] = useState({ name: "", amount: "", reason: "" });
 
   const isAdmin = !!me.isAdmin;
-  const mine = (m) => m.name.trim().toLowerCase() === me.first.trim().toLowerCase();
+  const mine = (m) =>
+    (m.user && me.username && m.user.toLowerCase() === me.username.toLowerCase()) ||
+    m.name.trim().toLowerCase() === (me.first || "").trim().toLowerCase();
   const visible = isAdmin ? data.money : data.money.filter(mine);
 
   const owing = visible.filter((m) => !m.settled);
@@ -470,12 +474,12 @@ function Money({ data, update, me }) {
   const total = owing.reduce((s, m) => s + Number(m.amount), 0);
 
   const add = () => {
-    const name = isAdmin ? form.name.trim() : me.first;
+    const name = isAdmin ? form.name.trim() : `${me.first} ${me.last}`.trim();
     if (!name || !form.amount) return;
     update({
       money: [
         ...data.money,
-        { id: "m" + Date.now(), name, amount: Number(form.amount), reason: form.reason.trim(), settled: false, added: todayISO() },
+        { id: "m" + Date.now(), name, user: isAdmin ? null : me.username, amount: Number(form.amount), reason: form.reason.trim(), settled: false, added: todayISO() },
       ],
     });
     setForm({ name: "", amount: "", reason: "" });
@@ -545,7 +549,7 @@ function Money({ data, update, me }) {
             </label>
           ) : (
             <label className="field"><span>Who is owed?</span>
-              <input value={me.first} disabled />
+              <input value={`${me.first} ${me.last}`.trim()} disabled />
             </label>
           )}
           <label className="field"><span>Amount (AUD)</span>
@@ -563,20 +567,46 @@ function Money({ data, update, me }) {
 
 /* ---------- team ---------- */
 function Team({ data, update, me }) {
-  const [first, setFirst] = useState("");
-  const [last, setLast] = useState("");
+  const [form, setForm] = useState({ first: "", last: "", username: "", password: "" });
+  const [profile, setProfile] = useState({
+    first: (data.adminProfile && data.adminProfile.first) || "Admin",
+    last: (data.adminProfile && data.adminProfile.last) || "",
+  });
+  const [saved, setSaved] = useState(false);
+  const [showPw, setShowPw] = useState(false);
 
   const add = () => {
-    if (!first.trim() || !last.trim()) return;
+    const { first, last, username, password } = form;
+    if (!first.trim() || !username.trim() || !password) return;
+    const taken = data.users.some(
+      (u) => (u.username || "").trim().toLowerCase() === username.trim().toLowerCase()
+    ) || username.trim().toLowerCase() === "admin";
+    if (taken) {
+      alert("That username is already taken — pick another.");
+      return;
+    }
     update({
-      users: [...data.users, { id: "u" + Date.now(), first: first.trim(), last: last.trim(), role: "Member" }],
+      users: [
+        ...data.users,
+        {
+          id: "u" + Date.now(),
+          first: first.trim(),
+          last: last.trim(),
+          username: username.trim(),
+          password,
+          role: "Member",
+        },
+      ],
     });
-    setFirst(""); setLast("");
+    setForm({ first: "", last: "", username: "", password: "" });
   };
 
-  const remove = (id) => {
-    if (id === me.id) return;
-    update({ users: data.users.filter((u) => u.id !== id) });
+  const remove = (id) => update({ users: data.users.filter((u) => u.id !== id) });
+
+  const saveProfile = () => {
+    update({ adminProfile: { first: profile.first.trim() || "Admin", last: profile.last.trim() } });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
   return (
@@ -584,29 +614,67 @@ function Team({ data, update, me }) {
       <div className="section-head">
         <div>
           <h2>Team logins</h2>
-          <p className="muted">First name is the username, last name is the password</p>
+          <p className="muted">Create a username and password for each member, then share it with them</p>
         </div>
       </div>
 
-      <div className="add-row">
-        <input value={first} onChange={(e) => setFirst(e.target.value)} placeholder="First name" />
-        <input value={last} onChange={(e) => setLast(e.target.value)} placeholder="Last name" />
+      <div className="card" style={{ marginBottom: 22 }}>
+        <h3 style={{ marginBottom: 12 }}>Add a member</h3>
+        <div className="grid2">
+          <label className="field"><span>First name</span>
+            <input value={form.first} onChange={(e) => setForm({ ...form, first: e.target.value })} placeholder="e.g. Nav" />
+          </label>
+          <label className="field"><span>Last name</span>
+            <input value={form.last} onChange={(e) => setForm({ ...form, last: e.target.value })} placeholder="e.g. Singh" />
+          </label>
+          <label className="field"><span>Username</span>
+            <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="e.g. nav" autoCapitalize="none" />
+          </label>
+          <label className="field"><span>Password</span>
+            <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Set a password" />
+          </label>
+        </div>
         <button className="btn primary" onClick={add}><UserPlus size={16} /> Add member</button>
       </div>
 
-      <div className="cards">
+      <div className="section-head" style={{ marginBottom: 10 }}>
+        <h3>Members</h3>
+        <button className="btn ghost" onClick={() => setShowPw(!showPw)}>
+          {showPw ? "Hide passwords" : "Show passwords"}
+        </button>
+      </div>
+      {data.users.length === 0 && (
+        <div className="empty" style={{ marginBottom: 22 }}>No members yet — add your first one above.</div>
+      )}
+      <div className="cards" style={{ marginBottom: 26 }}>
         {data.users.map((u) => (
           <article key={u.id} className="card team-card">
-            <span className="avatar big">{u.first[0]}</span>
+            <span className="avatar big">{(u.first || "?")[0]}</span>
             <div className="team-info">
               <h3>{u.first} {u.last}</h3>
-              <p className="muted small">{u.role}{u.id === me.id ? " · you" : ""}</p>
+              <p className="muted small">
+                {u.username ? `@${u.username}` : "No login set — remove and re-add"}
+                {showPw && u.password ? ` · ${u.password}` : ""}
+              </p>
             </div>
-            {u.id !== me.id && (
-              <button className="icon-btn danger" onClick={() => remove(u.id)} title="Remove"><Trash2 size={15} /></button>
-            )}
+            <button className="icon-btn danger" onClick={() => remove(u.id)} title="Remove"><Trash2 size={15} /></button>
           </article>
         ))}
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginBottom: 4 }}>Your admin profile</h3>
+        <p className="muted small" style={{ marginBottom: 12 }}>The name shown when you're logged in as Admin</p>
+        <div className="grid2">
+          <label className="field"><span>First name</span>
+            <input value={profile.first} onChange={(e) => setProfile({ ...profile, first: e.target.value })} placeholder="e.g. Rijul" />
+          </label>
+          <label className="field"><span>Last name</span>
+            <input value={profile.last} onChange={(e) => setProfile({ ...profile, last: e.target.value })} placeholder="e.g. Ahluwalia" />
+          </label>
+        </div>
+        <button className="btn primary" onClick={saveProfile}>{saved ? "Saved!" : "Save profile"}</button>
+        <p className="muted small" style={{ marginTop: 10 }}>Takes effect next time you log in.</p>
       </div>
     </section>
   );
