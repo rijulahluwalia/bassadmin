@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   Calendar as CalendarIcon, ListChecks, Wallet, Users, LogOut, Plus,
   MapPin, Clock, Video, Trash2, Check, ChevronLeft, ChevronRight, X,
-  UserPlus, Music, CircleDollarSign, Pencil
+  UserPlus, Music, CircleDollarSign, Pencil, User
 } from "lucide-react";
 
 /* ---------- storage helpers (shared across the whole team) ---------- */
@@ -142,6 +142,9 @@ export default function App() {
           {user.isAdmin && (
             <TabBtn icon={<Users size={17} />} label="Team" active={tab === "team"} onClick={() => setTab("team")} />
           )}
+          {!user.isAdmin && (
+            <TabBtn icon={<User size={17} />} label="Profile" active={tab === "profile"} onClick={() => setTab("profile")} />
+          )}
         </nav>
         <div className="userchip">
           <span className="avatar">{user.first[0]}</span>
@@ -157,6 +160,9 @@ export default function App() {
         {tab === "calendar" && <CalendarView data={data} />}
         {tab === "money" && <Money data={data} update={update} me={user} />}
         {tab === "team" && user.isAdmin && <Team data={data} update={update} me={user} />}
+        {tab === "profile" && !user.isAdmin && (
+          <Profile data={data} update={update} me={user} onUserUpdate={setUser} />
+        )}
       </main>
     </div>
   );
@@ -728,6 +734,91 @@ function Team({ data, update, me }) {
         </div>
         <button className="btn primary" onClick={saveProfile}>{saved ? "Saved!" : "Save profile"}</button>
         <p className="muted small" style={{ marginTop: 10 }}>Takes effect next time you log in.</p>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- member profile ---------- */
+function Profile({ data, update, me, onUserUpdate }) {
+  const [form, setForm] = useState({
+    first: me.first || "",
+    last: me.last || "",
+    username: me.username || "",
+    password: me.password || "",
+  });
+  const [err, setErr] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  const save = () => {
+    setErr("");
+    const first = form.first.trim();
+    const last = form.last.trim();
+    const username = form.username.trim();
+    const password = form.password;
+
+    if (!first || !username || !password) {
+      setErr("First name, username, and password can't be empty.");
+      return;
+    }
+    const taken =
+      username.toLowerCase() === "admin" ||
+      data.users.some(
+        (u) => u.id !== me.id && (u.username || "").trim().toLowerCase() === username.toLowerCase()
+      );
+    if (taken) {
+      setErr("That username is taken — try another.");
+      return;
+    }
+
+    const updatedUser = { ...me, first, last, username, password };
+    const oldUsername = (me.username || "").toLowerCase();
+    const oldFullName = `${me.first || ""} ${me.last || ""}`.trim().toLowerCase();
+    const newFullName = `${first} ${last}`.trim();
+
+    const users = data.users.map((u) => (u.id === me.id ? updatedUser : u));
+    const money = data.money.map((m) => {
+      const isMine =
+        (m.user && m.user.toLowerCase() === oldUsername) ||
+        m.name.trim().toLowerCase() === oldFullName;
+      return isMine ? { ...m, user: username, name: newFullName } : m;
+    });
+
+    update({ users, money });
+    onUserUpdate(updatedUser);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <section>
+      <div className="section-head">
+        <div>
+          <h2>Your profile</h2>
+          <p className="muted">Update your details and login</p>
+        </div>
+      </div>
+
+      <div className="card" style={{ maxWidth: 520 }}>
+        <div className="grid2">
+          <label className="field"><span>First name</span>
+            <input value={form.first} onChange={(e) => setForm({ ...form, first: e.target.value })} />
+          </label>
+          <label className="field"><span>Last name</span>
+            <input value={form.last} onChange={(e) => setForm({ ...form, last: e.target.value })} />
+          </label>
+          <label className="field"><span>Username</span>
+            <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} autoCapitalize="none" />
+          </label>
+          <label className="field"><span>Password</span>
+            <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+          </label>
+        </div>
+        {err && <p className="err">{err}</p>}
+        <button className="btn primary" onClick={save}>{saved ? "Saved!" : "Save changes"}</button>
+        <p className="muted small" style={{ marginTop: 10 }}>
+          Changing your username or password changes what you log in with — remember the new details.
+        </p>
       </div>
     </section>
   );
