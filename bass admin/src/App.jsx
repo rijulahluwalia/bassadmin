@@ -12,7 +12,7 @@ const STORE_KEY = "bass-team-data-v1";
 const LOGO = "/logo.png";
 
 const seedData = {
-  users: [{ id: "u1", first: "Rijul", last: "Ahluwalia", role: "Admin" }],
+  users: [],
   tasks: [
     {
       id: "t1",
@@ -138,7 +138,9 @@ export default function App() {
           <TabBtn icon={<ListChecks size={17} />} label="Tasks" active={tab === "tasks"} onClick={() => setTab("tasks")} />
           <TabBtn icon={<CalendarIcon size={17} />} label="Calendar" active={tab === "calendar"} onClick={() => setTab("calendar")} />
           <TabBtn icon={<Wallet size={17} />} label="Money" active={tab === "money"} onClick={() => setTab("money")} />
-          <TabBtn icon={<Users size={17} />} label="Team" active={tab === "team"} onClick={() => setTab("team")} />
+          {user.isAdmin && (
+            <TabBtn icon={<Users size={17} />} label="Team" active={tab === "team"} onClick={() => setTab("team")} />
+          )}
         </nav>
         <div className="userchip">
           <span className="avatar">{user.first[0]}</span>
@@ -152,8 +154,8 @@ export default function App() {
       <main className="content fade-in" key={tab}>
         {tab === "tasks" && <Tasks data={data} update={update} />}
         {tab === "calendar" && <CalendarView data={data} />}
-        {tab === "money" && <Money data={data} update={update} />}
-        {tab === "team" && <Team data={data} update={update} me={user} />}
+        {tab === "money" && <Money data={data} update={update} me={user} />}
+        {tab === "team" && user.isAdmin && <Team data={data} update={update} me={user} />}
       </main>
     </div>
   );
@@ -174,6 +176,10 @@ function Login({ data, onLogin }) {
   const [shake, setShake] = useState(false);
 
   const tryLogin = () => {
+    if (first.trim().toLowerCase() === "admin" && last === "BassRocks1234") {
+      onLogin({ id: "admin", first: "Admin", last: "", role: "Admin", isAdmin: true });
+      return;
+    }
     const match = data.users.find(
       (u) =>
         u.first.trim().toLowerCase() === first.trim().toLowerCase() &&
@@ -451,20 +457,25 @@ function CalendarView({ data }) {
 }
 
 /* ---------- money ---------- */
-function Money({ data, update }) {
+function Money({ data, update, me }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", amount: "", reason: "" });
 
-  const owing = data.money.filter((m) => !m.settled);
-  const settled = data.money.filter((m) => m.settled);
+  const isAdmin = !!me.isAdmin;
+  const mine = (m) => m.name.trim().toLowerCase() === me.first.trim().toLowerCase();
+  const visible = isAdmin ? data.money : data.money.filter(mine);
+
+  const owing = visible.filter((m) => !m.settled);
+  const settled = visible.filter((m) => m.settled);
   const total = owing.reduce((s, m) => s + Number(m.amount), 0);
 
   const add = () => {
-    if (!form.name.trim() || !form.amount) return;
+    const name = isAdmin ? form.name.trim() : me.first;
+    if (!name || !form.amount) return;
     update({
       money: [
         ...data.money,
-        { id: "m" + Date.now(), name: form.name.trim(), amount: Number(form.amount), reason: form.reason.trim(), settled: false, added: todayISO() },
+        { id: "m" + Date.now(), name, amount: Number(form.amount), reason: form.reason.trim(), settled: false, added: todayISO() },
       ],
     });
     setForm({ name: "", amount: "", reason: "" });
@@ -479,7 +490,7 @@ function Money({ data, update }) {
       <div className="section-head">
         <div>
           <h2>Money owed</h2>
-          <p className="muted">What BASS owes the team</p>
+          <p className="muted">{isAdmin ? "What BASS owes the team" : "What BASS owes you"}</p>
         </div>
         <button className="btn primary" onClick={() => setShowForm(true)}><Plus size={16} /> Add entry</button>
       </div>
@@ -488,7 +499,7 @@ function Money({ data, update }) {
         <CircleDollarSign size={26} />
         <div>
           <span className="total-amt">${total.toFixed(2)}</span>
-          <span className="muted small"> owed across {owing.length} {owing.length === 1 ? "person" : "entries"}</span>
+          <span className="muted small"> {isAdmin ? `owed across ${owing.length} ${owing.length === 1 ? "entry" : "entries"}` : "owed to you"}</span>
         </div>
       </div>
 
@@ -504,7 +515,9 @@ function Money({ data, update }) {
             <h3>{m.name} is owed <span className="amt">${Number(m.amount).toFixed(2)}</span></h3>
             <p className="notes">{m.reason || "No reason given"}</p>
             <p className="muted small">Added {fmt(m.added)}</p>
-            <button className="btn ghost" onClick={() => toggle(m.id)}><Check size={15} /> Mark as paid</button>
+            {isAdmin && (
+              <button className="btn ghost" onClick={() => toggle(m.id)}><Check size={15} /> Mark as paid</button>
+            )}
           </article>
         ))}
       </div>
@@ -517,7 +530,7 @@ function Money({ data, update }) {
               <article key={m.id} className="card money-card settled">
                 <h3>{m.name} — ${Number(m.amount).toFixed(2)}</h3>
                 <p className="notes">{m.reason}</p>
-                <button className="btn ghost" onClick={() => toggle(m.id)}>Undo</button>
+                {isAdmin && <button className="btn ghost" onClick={() => toggle(m.id)}>Undo</button>}
               </article>
             ))}
           </div>
@@ -526,9 +539,15 @@ function Money({ data, update }) {
 
       {showForm && (
         <Modal title="Add money entry" onClose={() => setShowForm(false)}>
-          <label className="field"><span>Who is owed?</span>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Nav" autoFocus />
-          </label>
+          {isAdmin ? (
+            <label className="field"><span>Who is owed?</span>
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Nav" autoFocus />
+            </label>
+          ) : (
+            <label className="field"><span>Who is owed?</span>
+              <input value={me.first} disabled />
+            </label>
+          )}
           <label className="field"><span>Amount (AUD)</span>
             <input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="300" />
           </label>
