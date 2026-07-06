@@ -287,6 +287,9 @@ function Login({ data, update, onLogin }) {
 
 /* ---------- tasks ---------- */
 const STATUSES = ["To do", "Recorded", "Edited", "Posted"];
+const GIG_STATUSES = ["To do", "Finished"];
+const statusesFor = (type) => (type === "Gig" ? GIG_STATUSES : STATUSES);
+const isComplete = (t) => t.status === "Posted" || t.status === "Finished";
 
 function Tasks({ data, update }) {
   const [showForm, setShowForm] = useState(false);
@@ -322,7 +325,7 @@ function Tasks({ data, update }) {
     .filter((t) => filter === "All" || t.status === filter)
     .sort((a, b) => (a.recordDate || "9999").localeCompare(b.recordDate || "9999"));
 
-  const doneCount = data.tasks.filter((t) => t.status === "Posted").length;
+  const doneCount = data.tasks.filter(isComplete).length;
   const pct = data.tasks.length ? Math.round((doneCount / data.tasks.length) * 100) : 0;
 
   return (
@@ -330,7 +333,7 @@ function Tasks({ data, update }) {
       <div className="section-head">
         <div>
           <h2>Content & tasks</h2>
-          <p className="muted">{data.tasks.length} tasks · {doneCount} posted</p>
+          <p className="muted">{data.tasks.length} tasks · {doneCount} done</p>
         </div>
         <button className="btn primary" onClick={openNew}><Plus size={16} /> New task</button>
       </div>
@@ -340,7 +343,7 @@ function Tasks({ data, update }) {
       </div>
 
       <div className="filters">
-        {["All", ...STATUSES].map((s) => (
+        {["All", ...STATUSES, "Finished"].map((s) => (
           <button key={s} className={`chip ${filter === s ? "chip-on" : ""}`} onClick={() => setFilter(s)}>{s}</button>
         ))}
       </div>
@@ -362,13 +365,13 @@ function Tasks({ data, update }) {
             <h3>{t.title}</h3>
             <div className="meta">
               <span><Clock size={14} /> {t.type === "Gig" ? "Gig" : "Record"}: <b>{fmt(t.recordDate)}</b></span>
-              <span><CalendarIcon size={14} /> Post: <b>{fmt(t.postDate)}</b></span>
+              {t.type !== "Gig" && <span><CalendarIcon size={14} /> Post: <b>{fmt(t.postDate)}</b></span>}
               <span><Users size={14} /> {t.people} people</span>
               <span><MapPin size={14} /> {t.location || "TBC"}</span>
             </div>
             {t.notes && <p className="notes">{t.notes}</p>}
             <div className="status-row">
-              {STATUSES.map((s) => (
+              {statusesFor(t.type).map((s) => (
                 <button
                   key={s}
                   className={`status-btn ${t.status === s ? "on" : ""}`}
@@ -389,7 +392,15 @@ function Tasks({ data, update }) {
           </label>
           <div className="grid2">
             <label className="field"><span>Type</span>
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+              <select value={form.type} onChange={(e) => {
+                const type = e.target.value;
+                setForm((f) => ({
+                  ...f,
+                  type,
+                  postDate: type === "Gig" ? "" : f.postDate,
+                  status: statusesFor(type).includes(f.status) ? f.status : "To do",
+                }));
+              }}>
                 {["Video", "Photoshoot", "Post", "Story", "Rehearsal", "Gig", "Other"].map((x) => <option key={x}>{x}</option>)}
               </select>
             </label>
@@ -399,9 +410,11 @@ function Tasks({ data, update }) {
             <label className="field"><span>{form.type === "Gig" ? "Gig date" : "Record date"}</span>
               <input type="date" value={form.recordDate} onChange={(e) => setForm({ ...form, recordDate: e.target.value })} />
             </label>
-            <label className="field"><span>Post date</span>
-              <input type="date" value={form.postDate} onChange={(e) => setForm({ ...form, postDate: e.target.value })} />
-            </label>
+            {form.type !== "Gig" && (
+              <label className="field"><span>Post date</span>
+                <input type="date" value={form.postDate} onChange={(e) => setForm({ ...form, postDate: e.target.value })} />
+              </label>
+            )}
           </div>
           <label className="field"><span>Location</span>
             <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="e.g. Parramatta studio" />
@@ -427,7 +440,7 @@ function CalendarView({ data }) {
     const map = {};
     data.tasks.forEach((t) => {
       if (t.recordDate) (map[t.recordDate] = map[t.recordDate] || []).push({ kind: t.type === "Gig" ? "Gig" : "Record", task: t });
-      if (t.postDate) (map[t.postDate] = map[t.postDate] || []).push({ kind: "Post", task: t });
+      if (t.postDate && t.type !== "Gig") (map[t.postDate] = map[t.postDate] || []).push({ kind: "Post", task: t });
     });
     return map;
   }, [data.tasks]);
@@ -871,8 +884,8 @@ function GlobalStyles() {
         color: var(--red-soft); background: rgba(224,40,48,.14);
         padding: 5px 11px; border-radius: 999px;
       }
-      .status-posted { opacity:.65; }
-      .status-posted h3 { text-decoration: line-through; text-decoration-color: var(--blue); }
+      .status-posted, .status-finished { opacity:.65; }
+      .status-posted h3, .status-finished h3 { text-decoration: line-through; text-decoration-color: var(--blue); }
       .meta { display:flex; flex-wrap:wrap; gap:10px 16px; margin:12px 0; font-size:13px; color: var(--muted); }
       .meta span { display:inline-flex; align-items:center; gap:6px; }
       .meta b { color: var(--text); font-weight:600; }
