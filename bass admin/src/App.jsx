@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   Calendar as CalendarIcon, ListChecks, Users, LogOut, Plus,
   MapPin, Clock, Video, Trash2, Check, ChevronLeft, ChevronRight, X,
-  UserPlus, Pencil, User, Music
+  UserPlus, Pencil, User, Music, Mail
 } from "lucide-react";
 
 /* ---------- storage helpers (shared across the whole team) ---------- */
@@ -84,6 +84,23 @@ const fmt = (d) => {
 };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+
+const gcalLink = (t, emails) => {
+  if (!t.recordDate) return null;
+  const start = t.recordDate.replace(/-/g, "");
+  const nd = new Date(t.recordDate + "T00:00:00");
+  nd.setDate(nd.getDate() + 1);
+  const end = `${nd.getFullYear()}${String(nd.getMonth() + 1).padStart(2, "0")}${String(nd.getDate()).padStart(2, "0")}`;
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `BASS: ${t.title}`,
+    dates: `${start}/${end}`,
+    details: `${t.type} \u2014 ${t.people} people needed.${t.notes ? " " + t.notes : ""} (Bhangra All Stars Sydney)`,
+    location: t.location || "",
+  });
+  if (emails && emails.length) params.set("add", emails.join(","));
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+};
 
 /* ---------- main app ---------- */
 export default function App() {
@@ -177,6 +194,7 @@ function Login({ data, update, onLogin }) {
   const [password, setPassword] = useState("");
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
+  const [email, setEmail] = useState("");
   const [err, setErr] = useState("");
   const [shake, setShake] = useState(false);
 
@@ -205,8 +223,12 @@ function Login({ data, update, onLogin }) {
 
   const trySignup = () => {
     const u = username.trim();
-    if (!first.trim() || !u || !password) {
-      fail("Fill in your first name, a username, and a password.");
+    if (!first.trim() || !u || !password || !email.trim()) {
+      fail("Fill in your first name, email, a username, and a password.");
+      return;
+    }
+    if (!email.includes("@")) {
+      fail("That email doesn't look right.");
       return;
     }
     const taken =
@@ -222,6 +244,7 @@ function Login({ data, update, onLogin }) {
       last: last.trim(),
       username: u,
       password,
+      email: email.trim(),
       role: "Member",
     };
     update({ users: [...data.users, newUser] });
@@ -254,6 +277,12 @@ function Login({ data, update, onLogin }) {
               <input value={last} onChange={(e) => setLast(e.target.value)} placeholder="e.g. Singh" />
             </label>
           </div>
+        )}
+        {mode === "signup" && (
+          <label className="field">
+            <span>Email</span>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@gmail.com" autoCapitalize="none" />
+          </label>
         )}
 
         <label className="field">
@@ -298,7 +327,7 @@ function Tasks({ data, update }) {
 
   const blank = {
     title: "", type: "Video", recordDate: "", postDate: "",
-    people: 4, location: "", status: "To do", notes: "",
+    people: 4, location: "", status: "To do", notes: "", emails: "", members: [],
   };
   const [form, setForm] = useState(blank);
 
@@ -320,6 +349,20 @@ function Tasks({ data, update }) {
   const remove = (id) => update({ tasks: data.tasks.filter((t) => t.id !== id) });
   const setStatus = (id, status) =>
     update({ tasks: data.tasks.map((t) => (t.id === id ? { ...t, status } : t)) });
+
+  const inviteEmails = (t) => {
+    const memberEmails = (t.members || [])
+      .map((id) => (data.users.find((u) => u.id === id) || {}).email)
+      .filter(Boolean);
+    const extra = (t.emails || "").split(",").map((e) => e.trim()).filter(Boolean);
+    return [...new Set([...memberEmails, ...extra])];
+  };
+  const goingNames = (t) =>
+    (t.members || [])
+      .map((id) => data.users.find((u) => u.id === id))
+      .filter(Boolean)
+      .map((u) => u.first)
+      .join(", ");
 
   const shown = data.tasks
     .filter((t) => filter === "All" || t.status === filter)
@@ -370,6 +413,12 @@ function Tasks({ data, update }) {
               <span><MapPin size={14} /> {t.location || "TBC"}</span>
             </div>
             {t.notes && <p className="notes">{t.notes}</p>}
+            {goingNames(t) && <p className="going"><Users size={13} /> Going: {goingNames(t)}</p>}
+            {t.recordDate && inviteEmails(t).length > 0 && (
+              <a className="btn ghost invite-btn" href={gcalLink(t, inviteEmails(t))} target="_blank" rel="noreferrer">
+                <Mail size={15} /> Send calendar invite
+              </a>
+            )}
             <div className="status-row">
               {statusesFor(t.type).map((s) => (
                 <button
@@ -418,6 +467,35 @@ function Tasks({ data, update }) {
           </div>
           <label className="field"><span>Location</span>
             <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="e.g. Parramatta studio" />
+          </label>
+          {data.users.length > 0 && (
+            <label className="field"><span>Who's going? (tap to select)</span>
+              <div className="member-picker">
+                {data.users.map((u) => {
+                  const on = (form.members || []).includes(u.id);
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      className={`chip ${on ? "chip-on" : ""}`}
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          members: on
+                            ? (f.members || []).filter((id) => id !== u.id)
+                            : [...(f.members || []), u.id],
+                        }))
+                      }
+                    >
+                      {u.first} {u.last}{u.email ? "" : " (no email)"}
+                    </button>
+                  );
+                })}
+              </div>
+            </label>
+          )}
+          <label className="field"><span>Extra emails (optional, comma separated)</span>
+            <input value={form.emails} onChange={(e) => setForm({ ...form, emails: e.target.value })} placeholder="guest@gmail.com" autoCapitalize="none" />
           </label>
           <label className="field"><span>Notes</span>
             <textarea rows="2" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Anything the team should know" />
@@ -527,7 +605,7 @@ function CalendarView({ data }) {
 
 /* ---------- team ---------- */
 function Team({ data, update, me }) {
-  const [form, setForm] = useState({ first: "", last: "", username: "", password: "" });
+  const [form, setForm] = useState({ first: "", last: "", username: "", password: "", email: "" });
   const [profile, setProfile] = useState({
     first: (data.adminProfile && data.adminProfile.first) || "Admin",
     last: (data.adminProfile && data.adminProfile.last) || "",
@@ -554,11 +632,12 @@ function Team({ data, update, me }) {
           last: last.trim(),
           username: username.trim(),
           password,
+          email: (form.email || "").trim(),
           role: "Member",
         },
       ],
     });
-    setForm({ first: "", last: "", username: "", password: "" });
+    setForm({ first: "", last: "", username: "", password: "", email: "" });
   };
 
   const remove = (id) => update({ users: data.users.filter((u) => u.id !== id) });
@@ -593,6 +672,9 @@ function Team({ data, update, me }) {
           <label className="field"><span>Password</span>
             <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Set a password" />
           </label>
+          <label className="field"><span>Email</span>
+            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="them@gmail.com" autoCapitalize="none" />
+          </label>
         </div>
         <button className="btn primary" onClick={add}><UserPlus size={16} /> Add member</button>
       </div>
@@ -614,6 +696,7 @@ function Team({ data, update, me }) {
               <h3>{u.first} {u.last}</h3>
               <p className="muted small">
                 {u.username ? `@${u.username}` : "No login set — remove and re-add"}
+                {u.email ? ` · ${u.email}` : " · no email"}
                 {showPw && u.password ? ` · ${u.password}` : ""}
               </p>
             </div>
@@ -647,6 +730,7 @@ function Profile({ data, update, me, onUserUpdate }) {
     last: me.last || "",
     username: me.username || "",
     password: me.password || "",
+    email: me.email || "",
   });
   const [err, setErr] = useState("");
   const [saved, setSaved] = useState(false);
@@ -657,9 +741,14 @@ function Profile({ data, update, me, onUserUpdate }) {
     const last = form.last.trim();
     const username = form.username.trim();
     const password = form.password;
+    const email = form.email.trim();
 
     if (!first || !username || !password) {
       setErr("First name, username, and password can't be empty.");
+      return;
+    }
+    if (email && !email.includes("@")) {
+      setErr("That email doesn't look right.");
       return;
     }
     const taken =
@@ -672,7 +761,7 @@ function Profile({ data, update, me, onUserUpdate }) {
       return;
     }
 
-    const updatedUser = { ...me, first, last, username, password };
+    const updatedUser = { ...me, first, last, username, password, email };
     const oldUsername = (me.username || "").toLowerCase();
     const oldFullName = `${me.first || ""} ${me.last || ""}`.trim().toLowerCase();
     const newFullName = `${first} ${last}`.trim();
@@ -715,6 +804,9 @@ function Profile({ data, update, me, onUserUpdate }) {
             <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </label>
         </div>
+        <label className="field"><span>Email</span>
+          <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="you@gmail.com" autoCapitalize="none" />
+        </label>
         {err && <p className="err">{err}</p>}
         <button className="btn primary" onClick={save}>{saved ? "Saved!" : "Save changes"}</button>
         <p className="muted small" style={{ marginTop: 10 }}>
@@ -902,6 +994,10 @@ function GlobalStyles() {
         text-align:center; padding: 46px 20px; color: var(--muted);
         border: 1.5px dashed var(--line); border-radius: var(--radius);
       }
+
+      .invite-btn { width:100%; margin-bottom:10px; text-decoration:none; }
+      .member-picker { display:flex; flex-wrap:wrap; gap:6px; }
+      .going { display:flex; align-items:center; gap:6px; font-size:13px; color: var(--blue); margin-bottom: 10px; }
 
       /* calendar */
       .cal-nav { display:flex; align-items:center; gap:8px; }
