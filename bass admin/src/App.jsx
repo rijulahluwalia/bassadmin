@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   Calendar as CalendarIcon, ListChecks, Users, LogOut, Plus,
   MapPin, Clock, Video, Trash2, Check, ChevronLeft, ChevronRight, X,
-  UserPlus, Pencil, User, Music, Mail, MessageCircle
+  UserPlus, Pencil, User, Music, Mail, MessageCircle, CalendarClock
 } from "lucide-react";
 
 /* ---------- storage helpers (shared across the whole team) ---------- */
@@ -173,6 +173,9 @@ export default function App() {
             <TabBtn icon={<Users size={17} />} label="Team" active={tab === "team"} onClick={() => setTab("team")} />
           )}
           {!user.isAdmin && (
+            <TabBtn icon={<CalendarClock size={17} />} label="My Schedule" active={tab === "schedule"} onClick={() => setTab("schedule")} />
+          )}
+          {!user.isAdmin && (
             <TabBtn icon={<User size={17} />} label="Profile" active={tab === "profile"} onClick={() => setTab("profile")} />
           )}
         </nav>
@@ -189,6 +192,7 @@ export default function App() {
         {tab === "tasks" && <Tasks data={data} update={update} />}
         {tab === "calendar" && <CalendarView data={data} />}
         {tab === "team" && user.isAdmin && <Team data={data} update={update} me={user} />}
+        {tab === "schedule" && !user.isAdmin && <Schedule data={data} me={user} />}
         {tab === "profile" && !user.isAdmin && (
           <Profile data={data} update={update} me={user} onUserUpdate={setUser} />
         )}
@@ -752,6 +756,76 @@ function Team({ data, update, me }) {
   );
 }
 
+/* ---------- my schedule ---------- */
+function Schedule({ data, me }) {
+  const today = todayISO();
+  const mine = data.tasks
+    .filter((t) => (t.members || []).includes(me.id))
+    .sort((a, b) => (a.recordDate || "9999").localeCompare(b.recordDate || "9999"));
+
+  const upcoming = mine.filter((t) => !t.recordDate || t.recordDate >= today);
+  const past = mine.filter((t) => t.recordDate && t.recordDate < today).reverse();
+
+  const dayLabel = (t) => {
+    if (!t.recordDate) return "Date TBC";
+    const diff = Math.round((new Date(t.recordDate + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000);
+    if (diff === 0) return "TODAY";
+    if (diff === 1) return "Tomorrow";
+    if (diff > 1 && diff <= 7) return `In ${diff} days`;
+    return fmt(t.recordDate);
+  };
+
+  return (
+    <section>
+      <div className="section-head">
+        <div>
+          <h2>My schedule</h2>
+          <p className="muted">Everything you've been added to</p>
+        </div>
+      </div>
+
+      {mine.length === 0 && (
+        <div className="empty">Nothing yet — when the admin adds you to a gig or shoot, it'll show up here.</div>
+      )}
+
+      {upcoming.length > 0 && (
+        <div className="cards">
+          {upcoming.map((t) => (
+            <article key={t.id} className={`card sched-card ${dayLabel(t) === "TODAY" ? "sched-today" : ""}`}>
+              <div className="card-top">
+                <span className="type-pill">{t.type === "Gig" ? <Music size={13} /> : <Video size={13} />} {t.type}</span>
+                <span className="sched-when">{dayLabel(t)}</span>
+              </div>
+              <h3>{t.title}</h3>
+              <div className="meta">
+                <span><Clock size={14} /> {fmt(t.recordDate)}</span>
+                <span><MapPin size={14} /> {t.location || "Location TBC"}</span>
+                <span><Users size={14} /> {t.people} people</span>
+              </div>
+              {t.notes && <p className="notes">{t.notes}</p>}
+              <p className="muted small">Status: {t.status}</p>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {past.length > 0 && (
+        <>
+          <h3 className="settled-head">Past</h3>
+          <div className="cards">
+            {past.map((t) => (
+              <article key={t.id} className="card sched-card sched-past">
+                <h3>{t.title}</h3>
+                <p className="muted small">{t.type} · {fmt(t.recordDate)} · {t.location || ""}</p>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 /* ---------- member profile ---------- */
 function Profile({ data, update, me, onUserUpdate }) {
   const [form, setForm] = useState({
@@ -1114,6 +1188,18 @@ function GlobalStyles() {
       .add-row input { flex:1; min-width: 150px; }
       .team-card { display:flex; align-items:center; gap:14px; }
       .team-info { flex:1; }
+
+      /* my schedule */
+      .sched-when {
+        font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+        color: var(--blue); background: rgba(157,182,255,.14);
+        padding: 5px 11px; border-radius: 999px;
+      }
+      .sched-today { border-color: var(--red); box-shadow: 0 0 0 1px var(--red) inset, 0 8px 24px rgba(224,40,48,.18); }
+      .sched-today .sched-when { color: #fff; background: var(--red); animation: pulseGlow 1.6s ease-in-out infinite; }
+      @keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(224,40,48,.5); } 50% { box-shadow: 0 0 0 6px rgba(224,40,48,0); } }
+      .sched-past { opacity:.55; }
+      .settled-head { margin: 28px 0 12px; color: var(--muted); }
 
       /* forms */
       .field { display:flex; flex-direction:column; gap:6px; margin-bottom: 14px; }
