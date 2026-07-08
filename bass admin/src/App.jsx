@@ -91,15 +91,17 @@ const gcalLink = (t, emails) => {
   const nd = new Date(t.recordDate + "T00:00:00");
   nd.setDate(nd.getDate() + 1);
   const end = `${nd.getFullYear()}${String(nd.getMonth() + 1).padStart(2, "0")}${String(nd.getDate()).padStart(2, "0")}`;
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: `BASS: ${t.title}`,
-    dates: `${start}/${end}`,
-    details: `${t.type} \u2014 ${t.people} people needed.${t.notes ? " " + t.notes : ""} (Bhangra All Stars Sydney)`,
-    location: t.location || "",
-  });
-  if (emails && emails.length) params.set("add", emails.join(","));
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+  const details = `${t.type} \u2014 ${t.people} people needed.${t.notes ? " " + t.notes : ""} (Bhangra All Stars Sydney)`;
+  let url =
+    "https://calendar.google.com/calendar/render?action=TEMPLATE" +
+    `&text=${encodeURIComponent(`BASS: ${t.title}`)}` +
+    `&dates=${start}/${end}` +
+    `&details=${encodeURIComponent(details)}` +
+    `&location=${encodeURIComponent(t.location || "")}`;
+  if (emails && emails.length) {
+    url += `&add=${emails.map((e) => encodeURIComponent(e)).join(",")}`;
+  }
+  return url;
 };
 
 /* ---------- main app ---------- */
@@ -477,7 +479,7 @@ function Tasks({ data, update }) {
                     <button
                       key={u.id}
                       type="button"
-                      className={`chip ${on ? "chip-on" : ""}`}
+                      className={`member-pick ${on ? "on" : ""}`}
                       onClick={() =>
                         setForm((f) => ({
                           ...f,
@@ -487,7 +489,12 @@ function Tasks({ data, update }) {
                         }))
                       }
                     >
-                      {u.first} {u.last}{u.email ? "" : " (no email)"}
+                      <span className="mini-avatar">{(u.first || "?")[0]}</span>
+                      <span className="member-pick-name">
+                        {u.first} {u.last}
+                        {!u.email && <em className="no-email">no email</em>}
+                      </span>
+                      <span className="pick-check">{on ? <Check size={14} /> : <Plus size={14} />}</span>
                     </button>
                   );
                 })}
@@ -996,7 +1003,33 @@ function GlobalStyles() {
       }
 
       .invite-btn { width:100%; margin-bottom:10px; text-decoration:none; }
-      .member-picker { display:flex; flex-wrap:wrap; gap:6px; }
+      .member-picker { display:grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap:8px; }
+      .member-pick {
+        display:flex; align-items:center; gap:9px; text-align:left;
+        background: var(--bg2); border:1.5px solid var(--line); color: var(--text);
+        padding: 8px 10px; border-radius: 12px; cursor:pointer;
+        font-family:inherit; font-size:13px; font-weight:600;
+        transition: all .18s ease;
+      }
+      .member-pick:hover { border-color: #4A5390; transform: translateY(-1px); }
+      .member-pick.on {
+        border-color: var(--red); background: rgba(224,40,48,.12);
+        box-shadow: 0 3px 12px rgba(224,40,48,.2);
+      }
+      .member-pick .mini-avatar {
+        width:26px; height:26px; border-radius:50%; flex-shrink:0;
+        background: linear-gradient(135deg, var(--red-soft), var(--red));
+        display:flex; align-items:center; justify-content:center;
+        font-size:12px; font-weight:700; color:#fff;
+      }
+      .member-pick-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .member-pick-name .no-email { display:block; font-style:normal; font-size:10.5px; font-weight:500; color: var(--muted); }
+      .pick-check {
+        width:22px; height:22px; border-radius:50%; flex-shrink:0;
+        display:flex; align-items:center; justify-content:center;
+        background: var(--bg); color: var(--muted); transition: all .18s ease;
+      }
+      .member-pick.on .pick-check { background: var(--red); color:#fff; }
       .going { display:flex; align-items:center; gap:6px; font-size:13px; color: var(--blue); margin-bottom: 10px; }
 
       /* calendar */
