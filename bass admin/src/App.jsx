@@ -87,15 +87,16 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const waLink = (t, going) => {
   const lines = [
-    "\uD83E\uDD41 *BASS Reminder*",
-    `\uD83D\uDCCC ${t.title} (${t.type})`,
-    `\uD83D\uDCC5 ${fmt(t.recordDate)}`,
+    "*BASS REMINDER*",
+    "",
+    `*${t.title}* (${t.type})`,
+    `Date: ${fmt(t.recordDate)}`,
   ];
-  if (t.location) lines.push(`\uD83D\uDCCD ${t.location}`);
-  if (t.people) lines.push(`\uD83D\uDC65 ${t.people} people needed`);
-  if (going) lines.push(`\u2705 Going: ${going}`);
-  if (t.notes) lines.push(`\uD83D\uDCDD ${t.notes}`);
-  lines.push("", "Bhangra All Stars Sydney \uD83D\uDCAA");
+  if (t.location) lines.push(`Location: ${t.location}`);
+  if (t.people) lines.push(`People needed: ${t.people}`);
+  if (going) lines.push(`Going: ${going}`);
+  if (t.notes) lines.push(`Notes: ${t.notes}`);
+  lines.push("", "- Bhangra All Stars Sydney");
   return `https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`;
 };
 
