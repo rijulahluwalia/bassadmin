@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   Calendar as CalendarIcon, ListChecks, Users, LogOut, Plus,
   MapPin, Clock, Video, Trash2, Check, ChevronLeft, ChevronRight, X,
-  UserPlus, Pencil, User, Music, Mail
+  UserPlus, Pencil, User, Music, Mail, MessageCircle
 } from "lucide-react";
 
 /* ---------- storage helpers (shared across the whole team) ---------- */
@@ -84,6 +84,20 @@ const fmt = (d) => {
 };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+
+const waLink = (t, going) => {
+  const lines = [
+    "\uD83E\uDD41 *BASS Reminder*",
+    `\uD83D\uDCCC ${t.title} (${t.type})`,
+    `\uD83D\uDCC5 ${fmt(t.recordDate)}`,
+  ];
+  if (t.location) lines.push(`\uD83D\uDCCD ${t.location}`);
+  if (t.people) lines.push(`\uD83D\uDC65 ${t.people} people needed`);
+  if (going) lines.push(`\u2705 Going: ${going}`);
+  if (t.notes) lines.push(`\uD83D\uDCDD ${t.notes}`);
+  lines.push("", "Bhangra All Stars Sydney \uD83D\uDCAA");
+  return `https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`;
+};
 
 const gcalLink = (t, emails) => {
   if (!t.recordDate) return null;
@@ -416,10 +430,17 @@ function Tasks({ data, update }) {
             </div>
             {t.notes && <p className="notes">{t.notes}</p>}
             {goingNames(t) && <p className="going"><Users size={13} /> Going: {goingNames(t)}</p>}
-            {t.recordDate && inviteEmails(t).length > 0 && (
-              <a className="btn ghost invite-btn" href={gcalLink(t, inviteEmails(t))} target="_blank" rel="noreferrer">
-                <Mail size={15} /> Send calendar invite
-              </a>
+            {t.recordDate && (
+              <div className="share-row">
+                {inviteEmails(t).length > 0 && (
+                  <a className="btn ghost invite-btn" href={gcalLink(t, inviteEmails(t))} target="_blank" rel="noreferrer">
+                    <Mail size={15} /> Calendar invite
+                  </a>
+                )}
+                <a className="btn ghost invite-btn wa-btn" href={waLink(t, goingNames(t))} target="_blank" rel="noreferrer">
+                  <MessageCircle size={15} /> WhatsApp
+                </a>
+              </div>
             )}
             <div className="status-row">
               {statusesFor(t.type).map((s) => (
@@ -1002,7 +1023,9 @@ function GlobalStyles() {
         border: 1.5px dashed var(--line); border-radius: var(--radius);
       }
 
-      .invite-btn { width:100%; margin-bottom:10px; text-decoration:none; }
+      .share-row { display:flex; gap:8px; margin-bottom:10px; }
+      .invite-btn { flex:1; text-decoration:none; }
+      .wa-btn:hover { border-color: #25D366; color: #25D366; }
       .member-picker { display:grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap:8px; }
       .member-pick {
         display:flex; align-items:center; gap:9px; text-align:left;
